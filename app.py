@@ -121,13 +121,9 @@ def generate_iso_docx(meta, ai_data):
             att_table.cell(row_idx, 1).text = parts.pop(0).strip()
         else:
             att_table.cell(row_idx, 0).text = person
-            att_table.cell(row_idx, 1).text = ""
-        att_table.cell(row_idx, 2).text = "\n\n"
             row_cells.text = ""
-        row_cells.text = "\n\n"
-    doc.add_paragraph()
-    sig_table = doc.add_table(rows=2, cols=2)
-    sig_table.style = 'Table Grid'
+row_cells.text = "\n\n"
+
     sig_table.cell(0, 0).text = "Prepared By (Secretary / Admin):"
     sig_table.cell(0, 1).text = "Reviewed & Approved By (Facilitator / OM):"
     sig_table.cell(1, 0).text = "\n\n___________________________\nSignature over Printed Name / Date"
