@@ -233,7 +233,38 @@ if generate_btn:
 
                 ai_result = json.loads(response.text)
 
-                meta_info = {
+                            meta_info = {
                     "doc_no": doc_no,
                     "title": meeting_title,
                     "date": meeting_date.strftime("%B %d, %Y"),
+                    "venue": venue,
+                    "facilitator": facilitator,
+                    "attendees": attendees
+                }
+                docx_file = generate_iso_docx(meta_info, ai_result)
+
+                st.success("✅ ISO Meeting Minutes successfully generated!")
+
+                st.download_button(
+                    label="📥 Download Official ISO Minutes (.docx)",
+                    data=docx_file,
+                    file_name=f"{doc_no}_{meeting_date.strftime('%Y%m%d')}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    type="primary"
+                )
+
+                tab1, tab2 = st.tabs(["📄 Formal ISO Minutes Preview", "🗣️ Word-for-Word Taglish Transcript"])
+                with tab1:
+                    st.subheader("Agenda")
+                    for a in ai_result.get("agenda", []):
+                        st.write(f"- {a}")
+                    st.subheader("Detailed Discussion Summary")
+                    for s in ai_result.get("summary", []):
+                        st.write(f"- {s}")
+                    st.subheader("Action Plan")
+                    st.table(ai_result.get("action_items", []))
+                with tab2:
+                    st.text_area("Verbatim Transcript", value=ai_result.get("transcript", ""), height=400)
+
+            except Exception as e:
+                st.error(f"❌ An error occurred: {str(e)}")
