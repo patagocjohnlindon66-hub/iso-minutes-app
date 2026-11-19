@@ -1,0 +1,239 @@
+import streamlit as st
+from google import genai
+from google.genai import types
+import docx
+from docx.shared import Inches, Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from io import BytesIO
+import datetime
+import tempfile
+import os
+import json
+
+# --- PAGE CONFIGURATION ---
+st.set_page_config(page_title="ISO Meeting Minutes AI", page_icon="📋", layout="wide")
+
+# --- SECURITY: PASSWORD PROTECTION ---
+def check_password():
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+
+    if not st.session_state["authenticated"]:
+        st.title("🔒 Private ISO Meeting Minutes Portal")
+        st.write("Please enter the company access password to continue.")
+        pwd = st.text_input("Company Password", type="password")
+        if st.button("Login"):
+            if pwd == st.secrets["APP_PASSWORD"]:
+                st.session_state["authenticated"] = True
+                st.rerun()
+            else:
+                st.error("❌ Incorrect password. Access denied.")
+        return False
+    return True
+
+if not check_password():
+    st.stop()
+
+# --- INITIALIZE GEMINI CLIENT ---
+client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+
+# --- WORD DOCUMENT (.DOCX) GENERATOR ---
+def generate_iso_docx(meta, ai_data):
+    doc = docx.Document()
+    
+    # Page Margins
+    for section in doc.sections:
+        section.top_margin = Inches(0.8)
+        section.bottom_margin = Inches(0.8)
+        section.left_margin = Inches(0.8)
+        section.right_margin = Inches(0.8)
+
+    # ISO Header Table
+    header_table = doc.add_table(rows=2, cols=2)
+    header_table.style = 'Table Grid'
+    header_table.cell(0, 0).text = "DOCUMENT TITLE:\nMINUTES OF THE MEETING (ISO COMPLIANT)"
+    header_table.cell(0, 1).text = f"Document Control No.:\n{meta['doc_no']}"
+    header_table.cell(1, 0).text = f"Meeting Title:\n{meta['title']}"
+    header_table.cell(1, 1).text = f"Date & Venue:\n{meta['date']} | {meta['venue']}"
+
+    for row in header_table.rows:
+        for cell in row.cells:
+            for paragraph in cell.paragraphs:
+                for run in paragraph.runs:
+                    run.font.size = Pt(10)
+                    run.font.bold = True
+
+    doc.add_paragraph()
+
+    # Facilitator Info
+    p_fac = doc.add_paragraph()
+    p_fac.add_run("Facilitator / Operations Manager: ").bold = True
+    p_fac.add_run(meta['facilitator'])
+
+    # PART 1: FORMAL ISO MINUTES
+    h1 = doc.add_heading("PART I: FORMAL MINUTES OF THE MEETING", level=1)
+    h1.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
+    # 1. Agenda
+    doc.add_heading("1. Agenda / Topics Discussed", level=2)
+    for item in ai_data.get("agenda", []):
+        doc.add_paragraph(item, style='List Bullet')
+
+    # 2. Discussion Summary
+    doc.add_heading("2. Detailed Summary of Discussions & Key Decisions", level=2)
+    for summary in ai_data.get("summary", []):
+        doc.add_paragraph(summary, style='List Bullet')
+
+    # 3. Action Plan Table
+    doc.add_heading("3. Action Plan & Responsibilities", level=2)
+    action_items = ai_data.get("action_items", [])
+    if action_items:
+        act_table = doc.add_table(rows=1, cols=4)
+        act_table.style = 'Table Grid'
+        hdr_cells = act_table.rows[0].cells
+        hdr_cells[0].text = "Action Item / Task"
+        hdr_cells[1].text = "Person Responsible"
+        hdr_cells[2].text = "Target Date"
+        hdr_cells[3].text = "Status"
+        
+        for cell in hdr_cells:
+            for p in cell.paragraphs:
+                for r in p.runs:
+                    r.font.bold = True
+
+        for act in action_items:
+            row_cells = act_table.add_row().cells
+            row_cells[0].text = str(act.get("task", ""))
+            row_cells[1].text = str(act.get("owner", ""))
+            row_cells[2].text = str(act.get("deadline", "TBD"))
+            row_cells[3].text = str(act.get("status", "Open"))
+    else:
+        doc.add_paragraph("No specific action items recorded.")
+
+    doc.add_paragraph()
+
+    # 4. Attendance & Wet Signature Sheet
+    doc.add_heading("4. Attendance & Verification (Wet Signature Required)", level=2)
+    att_table = doc.add_table(rows=1, cols=3)
+    att_table.style = 'Table Grid'
+    att_hdr = att_table.rows[0].cells
+    att_hdr[0].text = "Name of Attendee"
+    att_hdr[1].text = "Department / Role"
+    att_hdr[2].text = "Signature"
+
+    for cell in att_hdr:
+        for p in cell.paragraphs:
+            for r in p.runs:
+                r.font.bold = True
+
+    attendees_list = [a.strip() for a in meta['attendees'].split("\n") if a.strip()]
+    for person in attendees_list:
+        row_cells = att_table.add_row().cells
+        if "-" in person:
+            parts = person.split("-", 1)
+            row_cells[0].text = parts[0].strip()
+            row_cells[1].text = parts[1].strip()
+        else:
+            row_cells[0].text = person
+            row_cells[1].text = ""
+        row_cells[2].text = "\n\n"
+
+    # Prepared & Approved By Block
+    doc.add_paragraph()
+    sig_table = doc.add_table(rows=2, cols=2)
+    sig_table.style = 'Table Grid'
+    sig_table.cell(0, 0).text = "Prepared By (Secretary / Admin):"
+    sig_table.cell(0, 1).text = "Reviewed & Approved By (Facilitator / OM):"
+    sig_table.cell(1, 0).text = "\n\n___________________________\nSignature over Printed Name / Date"
+    sig_table.cell(1, 1).text = f"\n\n___________________________\n{meta['facilitator']}\nSignature over Printed Name / Date"
+
+    # Page Break before Transcript
+    doc.add_page_break()
+
+    # PART 2: WORD-FOR-WORD TRANSCRIPT
+    doc.add_heading("PART II: WORD-FOR-WORD MEETING TRANSCRIPT", level=1)
+    doc.add_paragraph("Note: Transcribed verbatim in original spoken language (Taglish/English/Tagalog) with speaker attribution.")
+    
+    transcript_text = ai_data.get("transcript", "No transcript generated.")
+    for line in transcript_text.split("\n"):
+        if line.strip():
+            p = doc.add_paragraph()
+            if ":" in line:
+                speaker, speech = line.split(":", 1)
+                p.add_run(speaker + ":").bold = True
+                p.add_run(speech)
+            else:
+                p.add_run(line)
+
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+# --- MAIN APP UI ---
+st.title("📋 Private ISO Meeting Minutes AI Generator")
+st.markdown("Generate audit-ready **ISO Minutes of the Meeting** + **Verbatim Taglish Transcript** in one click.")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("1. ISO Document Details")
+    doc_no = st.text_input("Document Control No.", value="ISO-MOM-2026-001")
+    meeting_title = st.text_input("Meeting Title", value="Weekly Operations & Quality Alignment")
+    meeting_date = st.date_input("Date", value=datetime.date.today())
+    venue = st.text_input("Venue / Platform", value="Main Conference Room / Online")
+    facilitator = st.text_input("Facilitator / Operations Manager", value="")
+    
+    st.markdown("**Attendees List** *(Format: Name - Role, one per line. Do a quick roll-call at the start of the recording for accurate speaker recognition)*")
+    attendees = st.text_area("Attendees", height=150, placeholder="Juan Dela Cruz - Operations Manager\nMaria Santos - QA Lead\nMark Reyes - Production Supervisor")
+
+with col2:
+    st.subheader("2. Meeting Audio Input")
+    st.info("💡 **Tip para hindi mapahiya sa Boss:** Simulan ang recording sa mabilis na roll-call (*'Juan here, Maria here...'*) para 100% kilala ng AI kung sino ang nagsasalita at sumasabad.")
+    
+    audio_source = st.radio("Choose Audio Input Method:", ["🎙️ Record Live Microphone", "📁 Upload Audio File (MP3, WAV, M4A, OGG)"])
+    
+    audio_bytes = None
+    file_ext = ".wav"
+
+    if audio_source == "🎙️ Record Live Microphone":
+        recorded_audio = st.audio_input("Click the mic icon to start/stop recording")
+        if recorded_audio:
+            audio_bytes = recorded_audio.read()
+            file_ext = ".wav"
+    else:
+        uploaded_file = st.file_uploader("Upload Meeting Recording", type=["mp3", "wav", "m4a", "ogg", "aac"])
+        if uploaded_file:
+            audio_bytes = uploaded_file.read()
+            file_ext = os.path.splitext(uploaded_file.name)[1]
+
+    st.markdown("---")
+    generate_btn = st.button("🚀 Generate ISO Minutes & Word File", type="primary", use_container_width=True)
+
+# --- PROCESSING LOGIC ---
+if generate_btn:
+    if not audio_bytes:
+        st.warning("⚠️ Please record or upload an audio file first.")
+    elif not attendees.strip():
+        st.warning("⚠️ Please enter the Attendees list for speaker recognition and the signature sheet.")
+    else:
+        with st.spinner("⏳ Analyzing voices & generating detailed ISO minutes... (1-2 minutes for long meetings)"):
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
+                    tmp_file.write(audio_bytes)
+                    tmp_path = tmp_file.name
+
+                uploaded_gemini_file = client.files.upload(file=tmp_path)
+
+                prompt = f"""
+                You are an executive-level ISO 9001 Document Controller and Corporate Secretary in the Philippines.
+                Listen carefully to the entire meeting audio. The speakers use Taglish (Tagalog and English).
+                
+                Official Attendees List for Speaker Identification:
+                {attendees}
+                
+                Facilitator/OM: {facilitator}
+
+                Perform two tasks and return the output strictly in valid JSON format:
+                1. "agenda": A list of strings summarizing all main topics/agenda discussed (in formal, executive English).
+                2. "summary": A thorough, detailed list of strings capturing all key discussions, numbers/metrics mentioned, issues raised, agreements, and management decisions (in formal, executive English suitable for top management and ISO audit). Do not miss important details.
