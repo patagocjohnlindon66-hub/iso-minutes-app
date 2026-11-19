@@ -79,23 +79,22 @@ def generate_iso_docx(meta, ai_data):
     if action_items:
         act_table = doc.add_table(rows=1, cols=4)
         act_table.style = 'Table Grid'
-        hdr_cells = act_table.rows.cells
-        hdr_cells.text = "Action Item / Task"
-        hdr_cells.text = "Person Responsible"
-        hdr_cells.text = "Target Date"
-        hdr_cells.text = "Status"
+        act_table.cell(0, 0).text = "Action Item / Task"
+        act_table.cell(0, 1).text = "Person Responsible"
+        act_table.cell(0, 2).text = "Target Date"
+        act_table.cell(0, 3).text = "Status"
         
-        for cell in hdr_cells:
-            for p in cell.paragraphs:
+        for col_idx in range(4):
+            for p in act_table.cell(0, col_idx).paragraphs:
                 for r in p.runs:
                     r.font.bold = True
 
-        for act in action_items:
-            row_cells = act_table.add_row().cells
-            row_cells.text = str(act.get("task", ""))
-            row_cells.text = str(act.get("owner", ""))
-            row_cells.text = str(act.get("deadline", "TBD"))
-            row_cells.text = str(act.get("status", "Open"))
+        for row_idx, act in enumerate(action_items, start=1):
+            act_table.add_row()
+            act_table.cell(row_idx, 0).text = str(act.get("task", ""))
+            act_table.cell(row_idx, 1).text = str(act.get("owner", ""))
+            act_table.cell(row_idx, 2).text = str(act.get("deadline", "TBD"))
+            act_table.cell(row_idx, 3).text = str(act.get("status", "Open"))
     else:
         doc.add_paragraph("No specific action items recorded.")
 
@@ -104,25 +103,27 @@ def generate_iso_docx(meta, ai_data):
     doc.add_heading("4. Attendance & Verification (Wet Signature Required)", level=2)
     att_table = doc.add_table(rows=1, cols=3)
     att_table.style = 'Table Grid'
-    att_hdr = att_table.rows.cells
-    att_hdr.text = "Name of Attendee"
-    att_hdr.text = "Department / Role"
-    att_hdr.text = "Signature"
+    att_table.cell(0, 0).text = "Name of Attendee"
+    att_table.cell(0, 1).text = "Department / Role"
+    att_table.cell(0, 2).text = "Signature"
 
-    for cell in att_hdr:
-        for p in cell.paragraphs:
+    for col_idx in range(3):
+        for p in att_table.cell(0, col_idx).paragraphs:
             for r in p.runs:
                 r.font.bold = True
 
-    attendees_list = [a.strip() for a in meta['attendees'].split("\n") if a.strip()]
-    for person in attendees_list:
-        row_cells = att_table.add_row().cells
+    attendees_list = [a.strip() for a in meta.get('attendees', '').split("\n") if a.strip()]
+    for row_idx, person in enumerate(attendees_list, start=1):
+        att_table.add_row()
         if "-" in person:
             parts = person.split("-", 1)
-            row_cells.text = parts.strip()
-            row_cells.text = parts.strip()
+            att_table.cell(row_idx, 0).text = parts.pop(0).strip()
+            att_table.cell(row_idx, 1).text = parts.pop(0).strip()
         else:
-            row_cells.text = person
+            att_table.cell(row_idx, 0).text = person
+            att_table.cell(row_idx, 1).text = ""
+        att_table.cell(row_idx, 2).text = "\n\n"
+
             row_cells.text = ""
         row_cells.text = "\n\n"
 
