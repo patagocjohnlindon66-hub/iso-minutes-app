@@ -10,10 +10,8 @@ import tempfile
 import os
 import json
 
-# --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="ISO Meeting Minutes AI", page_icon="📋", layout="wide")
 
-# --- SECURITY: PASSWORD PROTECTION ---
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
@@ -34,21 +32,17 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- INITIALIZE GEMINI CLIENT ---
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
-# --- WORD DOCUMENT (.DOCX) GENERATOR ---
 def generate_iso_docx(meta, ai_data):
     doc = docx.Document()
     
-    # Page Margins
     for section in doc.sections:
         section.top_margin = Inches(0.8)
         section.bottom_margin = Inches(0.8)
         section.left_margin = Inches(0.8)
         section.right_margin = Inches(0.8)
 
-    # ISO Header Table
     header_table = doc.add_table(rows=2, cols=2)
     header_table.style = 'Table Grid'
     header_table.cell(0, 0).text = "DOCUMENT TITLE:\nMINUTES OF THE MEETING (ISO COMPLIANT)"
@@ -65,26 +59,21 @@ def generate_iso_docx(meta, ai_data):
 
     doc.add_paragraph()
 
-    # Facilitator Info
     p_fac = doc.add_paragraph()
     p_fac.add_run("Facilitator / Operations Manager: ").bold = True
     p_fac.add_run(meta['facilitator'])
 
-    # PART 1: FORMAL ISO MINUTES
     h1 = doc.add_heading("PART I: FORMAL MINUTES OF THE MEETING", level=1)
     h1.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
-    # 1. Agenda
     doc.add_heading("1. Agenda / Topics Discussed", level=2)
     for item in ai_data.get("agenda", []):
         doc.add_paragraph(item, style='List Bullet')
 
-    # 2. Discussion Summary
     doc.add_heading("2. Detailed Summary of Discussions & Key Decisions", level=2)
     for summary in ai_data.get("summary", []):
         doc.add_paragraph(summary, style='List Bullet')
 
-    # 3. Action Plan Table
     doc.add_heading("3. Action Plan & Responsibilities", level=2)
     action_items = ai_data.get("action_items", [])
     if action_items:
@@ -112,7 +101,6 @@ def generate_iso_docx(meta, ai_data):
 
     doc.add_paragraph()
 
-    # 4. Attendance & Wet Signature Sheet
     doc.add_heading("4. Attendance & Verification (Wet Signature Required)", level=2)
     att_table = doc.add_table(rows=1, cols=3)
     att_table.style = 'Table Grid'
@@ -138,7 +126,6 @@ def generate_iso_docx(meta, ai_data):
             row_cells[1].text = ""
         row_cells[2].text = "\n\n"
 
-    # Prepared & Approved By Block
     doc.add_paragraph()
     sig_table = doc.add_table(rows=2, cols=2)
     sig_table.style = 'Table Grid'
@@ -147,10 +134,8 @@ def generate_iso_docx(meta, ai_data):
     sig_table.cell(1, 0).text = "\n\n___________________________\nSignature over Printed Name / Date"
     sig_table.cell(1, 1).text = f"\n\n___________________________\n{meta['facilitator']}\nSignature over Printed Name / Date"
 
-    # Page Break before Transcript
     doc.add_page_break()
 
-    # PART 2: WORD-FOR-WORD TRANSCRIPT
     doc.add_heading("PART II: WORD-FOR-WORD MEETING TRANSCRIPT", level=1)
     doc.add_paragraph("Note: Transcribed verbatim in original spoken language (Taglish/English/Tagalog) with speaker attribution.")
     
@@ -170,7 +155,6 @@ def generate_iso_docx(meta, ai_data):
     buffer.seek(0)
     return buffer
 
-# --- MAIN APP UI ---
 st.title("📋 Private ISO Meeting Minutes AI Generator")
 st.markdown("Generate audit-ready **ISO Minutes of the Meeting** + **Verbatim Taglish Transcript** in one click.")
 
@@ -210,7 +194,6 @@ with col2:
     st.markdown("---")
     generate_btn = st.button("🚀 Generate ISO Minutes & Word File", type="primary", use_container_width=True)
 
-# --- PROCESSING LOGIC ---
 if generate_btn:
     if not audio_bytes:
         st.warning("⚠️ Please record or upload an audio file first.")
@@ -225,15 +208,13 @@ if generate_btn:
 
                 uploaded_gemini_file = client.files.upload(file=tmp_path)
 
-                prompt = f"""
-                You are an executive-level ISO 9001 Document Controller and Corporate Secretary in the Philippines.
-                Listen carefully to the entire meeting audio. The speakers use Taglish (Tagalog and English).
-                
-                Official Attendees List for Speaker Identification:
-                {attendees}
-                
-                Facilitator/OM: {facilitator}
-
-                Perform two tasks and return the output strictly in valid JSON format:
-                1. "agenda": A list of strings summarizing all main topics/agenda discussed (in formal, executive English).
-                2. "summary": A thorough, detailed list of strings capturing all key discussions, numbers/metrics mentioned, issues raised, agreements, and management decisions (in formal, executive English suitable for top management and ISO audit). Do not miss important details.
+                prompt_lines = [
+                    "You are an executive-level ISO 9001 Document Controller and Corporate Secretary in the Philippines.",
+                    "Listen carefully to the entire meeting audio. The speakers use Taglish (Tagalog and English).",
+                    f"Official Attendees List for Speaker Identification:\n{attendees}",
+                    f"Facilitator/OM: {facilitator}",
+                    "Perform two tasks and return the output strictly in valid JSON format:",
+                    "1. 'agenda': A list of strings summarizing all main topics/agenda discussed (in formal, executive English).",
+                    "2. 'summary': A thorough, detailed list of strings capturing all key discussions, numbers/metrics mentioned, issues raised, agreements, and management decisions (in formal, executive English suitable for top management and ISO audit). Do not miss important details.",
+                    "3. 'action_items': A list of objects, each with keys 'task' (clear, formal English), 'owner' (exact name from attendees), 'deadline' (mentioned date or 'Next Meeting'), and 'status' ('Open').",
+                    "4. 'transcript': A complete, word-for-word verbatim transcript of the entire audio. Keep the exact words spoken (do not translate Taglish to English in the transcript). Attribute every single line to the correct speaker based on voice tone, context, and roll-call (e.g., 'Juan Dela Cruz: Okay, simulan na natin...').",
