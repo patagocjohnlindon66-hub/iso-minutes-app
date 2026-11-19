@@ -233,7 +233,7 @@ if generate_btn:
 
                 ai_result = json.loads(response.text)
 
-                            meta_info = {
+                meta_info = {
                     "doc_no": doc_no,
                     "title": meeting_title,
                     "date": meeting_date.strftime("%B %d, %Y"),
