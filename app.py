@@ -79,11 +79,11 @@ def generate_iso_docx(meta, ai_data):
     if action_items:
         act_table = doc.add_table(rows=1, cols=4)
         act_table.style = 'Table Grid'
-        hdr_cells = act_table.rows[0].cells
-        hdr_cells[0].text = "Action Item / Task"
-        hdr_cells[1].text = "Person Responsible"
-        hdr_cells[2].text = "Target Date"
-        hdr_cells[3].text = "Status"
+        hdr_cells = act_table.rows.cells
+        hdr_cells.text = "Action Item / Task"
+        hdr_cells.text = "Person Responsible"
+        hdr_cells.text = "Target Date"
+        hdr_cells.text = "Status"
         
         for cell in hdr_cells:
             for p in cell.paragraphs:
@@ -92,10 +92,10 @@ def generate_iso_docx(meta, ai_data):
 
         for act in action_items:
             row_cells = act_table.add_row().cells
-            row_cells[0].text = str(act.get("task", ""))
-            row_cells[1].text = str(act.get("owner", ""))
-            row_cells[2].text = str(act.get("deadline", "TBD"))
-            row_cells[3].text = str(act.get("status", "Open"))
+            row_cells.text = str(act.get("task", ""))
+            row_cells.text = str(act.get("owner", ""))
+            row_cells.text = str(act.get("deadline", "TBD"))
+            row_cells.text = str(act.get("status", "Open"))
     else:
         doc.add_paragraph("No specific action items recorded.")
 
@@ -104,10 +104,10 @@ def generate_iso_docx(meta, ai_data):
     doc.add_heading("4. Attendance & Verification (Wet Signature Required)", level=2)
     att_table = doc.add_table(rows=1, cols=3)
     att_table.style = 'Table Grid'
-    att_hdr = att_table.rows[0].cells
-    att_hdr[0].text = "Name of Attendee"
-    att_hdr[1].text = "Department / Role"
-    att_hdr[2].text = "Signature"
+    att_hdr = att_table.rows.cells
+    att_hdr.text = "Name of Attendee"
+    att_hdr.text = "Department / Role"
+    att_hdr.text = "Signature"
 
     for cell in att_hdr:
         for p in cell.paragraphs:
@@ -119,12 +119,12 @@ def generate_iso_docx(meta, ai_data):
         row_cells = att_table.add_row().cells
         if "-" in person:
             parts = person.split("-", 1)
-            row_cells[0].text = parts[0].strip()
-            row_cells[1].text = parts[1].strip()
+            row_cells.text = parts.strip()
+            row_cells.text = parts.strip()
         else:
-            row_cells[0].text = person
-            row_cells[1].text = ""
-        row_cells[2].text = "\n\n"
+            row_cells.text = person
+            row_cells.text = ""
+        row_cells.text = "\n\n"
 
     doc.add_paragraph()
     sig_table = doc.add_table(rows=2, cols=2)
@@ -168,12 +168,12 @@ with col1:
     venue = st.text_input("Venue / Platform", value="Main Conference Room / Online")
     facilitator = st.text_input("Facilitator / Operations Manager", value="")
     
-    st.markdown("**Attendees List** *(Format: Name - Role, one per line. Do a quick roll-call at the start of the recording for accurate speaker recognition)*")
+    st.markdown("**Attendees List** *(Format: Name - Role, one per line)*")
     attendees = st.text_area("Attendees", height=150, placeholder="Juan Dela Cruz - Operations Manager\nMaria Santos - QA Lead\nMark Reyes - Production Supervisor")
 
 with col2:
     st.subheader("2. Meeting Audio Input")
-    st.info("💡 **Tip para hindi mapahiya sa Boss:** Simulan ang recording sa mabilis na roll-call (*'Juan here, Maria here...'*) para 100% kilala ng AI kung sino ang nagsasalita at sumasabad.")
+    st.info("💡 **Tip:** Simulan ang recording sa mabilis na roll-call (*'Juan here, Maria here...'*) para 100% kilala ng AI kung sino ang nagsasalita.")
     
     audio_source = st.radio("Choose Audio Input Method:", ["🎙️ Record Live Microphone", "📁 Upload Audio File (MP3, WAV, M4A, OGG)"])
     
@@ -189,7 +189,7 @@ with col2:
         uploaded_file = st.file_uploader("Upload Meeting Recording", type=["mp3", "wav", "m4a", "ogg", "aac"])
         if uploaded_file:
             audio_bytes = uploaded_file.read()
-            file_ext = os.path.splitext(uploaded_file.name)[1]
+            file_ext = os.path.splitext(uploaded_file.name)
 
     st.markdown("---")
     generate_btn = st.button("🚀 Generate ISO Minutes & Word File", type="primary", use_container_width=True)
@@ -200,7 +200,7 @@ if generate_btn:
     elif not attendees.strip():
         st.warning("⚠️ Please enter the Attendees list for speaker recognition and the signature sheet.")
     else:
-        with st.spinner("⏳ Analyzing voices & generating detailed ISO minutes... (1-2 minutes for long meetings)"):
+        with st.spinner("⏳ Analyzing voices & generating detailed ISO minutes..."):
             try:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
                     tmp_file.write(audio_bytes)
@@ -208,13 +208,32 @@ if generate_btn:
 
                 uploaded_gemini_file = client.files.upload(file=tmp_path)
 
-                prompt_lines = [
-                    "You are an executive-level ISO 9001 Document Controller and Corporate Secretary in the Philippines.",
-                    "Listen carefully to the entire meeting audio. The speakers use Taglish (Tagalog and English).",
-                    f"Official Attendees List for Speaker Identification:\n{attendees}",
-                    f"Facilitator/OM: {facilitator}",
-                    "Perform two tasks and return the output strictly in valid JSON format:",
-                    "1. 'agenda': A list of strings summarizing all main topics/agenda discussed (in formal, executive English).",
-                    "2. 'summary': A thorough, detailed list of strings capturing all key discussions, numbers/metrics mentioned, issues raised, agreements, and management decisions (in formal, executive English suitable for top management and ISO audit). Do not miss important details.",
-                    "3. 'action_items': A list of objects, each with keys 'task' (clear, formal English), 'owner' (exact name from attendees), 'deadline' (mentioned date or 'Next Meeting'), and 'status' ('Open').",
-                    "4. 'transcript': A complete, word-for-word verbatim transcript of the entire audio. Keep the exact words spoken (do not translate Taglish to English in the transcript). Attribute every single line to the correct speaker based on voice tone, context, and roll-call (e.g., 'Juan Dela Cruz: Okay, simulan na natin...').",
+                prompt = (
+                    "You are an executive-level ISO 9001 Document Controller and Corporate Secretary in the Philippines. "
+                    "Listen carefully to the entire meeting audio. The speakers use Taglish (Tagalog and English). "
+                    f"Official Attendees List: {attendees}. Facilitator/OM: {facilitator}. "
+                    "Return valid JSON with 4 keys: "
+                    "1. 'agenda': list of strings of main topics discussed in formal English. "
+                    "2. 'summary': thorough list of strings of key discussions, numbers, agreements, and decisions in formal English. "
+                    "3. 'action_items': list of objects with keys 'task', 'owner', 'deadline', and 'status' ('Open'). "
+                    "4. 'transcript': complete word-for-word verbatim transcript in original Taglish with speaker attribution based on voice and roll-call."
+                )
+
+                response = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=[uploaded_gemini_file, prompt],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        temperature=0.2
+                    )
+                )
+
+                os.remove(tmp_path)
+                client.files.delete(name=uploaded_gemini_file.name)
+
+                ai_result = json.loads(response.text)
+
+                meta_info = {
+                    "doc_no": doc_no,
+                    "title": meeting_title,
+                    "date": meeting_date.strftime("%B %d, %Y"),
