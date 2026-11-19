@@ -121,7 +121,7 @@ def generate_iso_docx(meta, ai_data):
             att_table.cell(row_idx, 1).text = parts.pop(0).strip()
         else:
             att_table.cell(row_idx, 0).text = person
-                att_table.cell(row_idx, 1).text = ""
+            att_table.cell(row_idx, 1).text = ""
         att_table.cell(row_idx, 2).text = "\n\n"
 
     doc.add_paragraph()
