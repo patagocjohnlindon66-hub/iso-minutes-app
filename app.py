@@ -187,7 +187,7 @@ with col2:
         uploaded_file = st.file_uploader("Upload Meeting Recording", type=["mp3", "wav", "m4a", "ogg", "aac"])
         if uploaded_file:
             audio_bytes = uploaded_file.read()
-            file_ext = os.path.splitext(uploaded_file.name)
+            file_ext = "." + uploaded_file.name.split(".")[-1]
 
     st.markdown("---")
     generate_btn = st.button("🚀 Generate ISO Minutes & Word File", type="primary", use_container_width=True)
